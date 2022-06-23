@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+if [[ $GO_PROXY_PAT ]]; then
+  echo "machine goproxy.githubapp.com login nobody password $GO_PROXY_PAT" >> $HOME/.netrc
+fi
