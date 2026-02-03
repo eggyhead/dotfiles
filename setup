@@ -73,6 +73,42 @@ This folder is populated by your dotfiles on Codespace startup from:
 
 Start here:
 - github/docs/annoyances-and-workflow.md
+- github/docs/how-i-built-this.md
+- github/docs/summary-and-testing-plan.md
 - github/metadata/dotcom-test-modes.metadata.yml
-- github/instructions/dotcom
-
+- github/instructions/dotcom-test-modes.instructions.md
+- github/instructions/copilot-quality.instructions.md
+
+Tip:
+Open the relevant instruction file and paste key rules into Copilot Chat at session start,
+or attach the file as context.
+EOF
+  fi
+
+  echo "Copilot playbook: added any missing files into ${DEST_ROOT}"
+}
+
+# Only run in Codespaces where the github/github workspace exists.
+if [[ -d "$WORKSPACE_GITHUB_DIR" ]]; then
+  sync_playbook_add_only || echo "Copilot playbook sync failed (non-fatal)."
+fi
+
+# --- Ensure ~/.bash_aliases is installed and sourced ---
+# This makes aliases available in new Codespaces (bash).
+DOTFILES_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Install ~/.bash_aliases (symlink preferred)
+if [[ -f "${DOTFILES_DIR}/.bash_aliases" && ! -e "${HOME}/.bash_aliases" ]]; then
+  ln -s "${DOTFILES_DIR}/.bash_aliases" "${HOME}/.bash_aliases"
+fi
+
+# Ensure bash sources ~/.bash_aliases (idempotent)
+if [[ -f "${HOME}/.bashrc" ]] && ! grep -q 'bash_aliases' "${HOME}/.bashrc"; then
+  cat >> "${HOME}/.bashrc" <<'EOF'
+
+# Load user aliases (dotfiles)
+if [ -f ~/.bash_aliases ]; then
+  source ~/.bash_aliases
+fi
+EOF
+fi
