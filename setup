@@ -88,9 +88,73 @@ EOF
   echo "Copilot playbook: added any missing files into ${DEST_ROOT}"
 }
 
+# --- Copy instructions + metadata into repo-local untracked folders (add-only) ---
+# Why: github/github already has .github/instructions/, and we don't want collisions or tracked changes.
+# We place local-only files under:
+#   .github/instructions.local/
+#   .github/metadata.local/
+sync_repo_local_guidance_add_only() {
+  local repo_dotgithub="${WORKSPACE_GITHUB_DIR}/.github"
+  local dest_instructions="${repo_dotgithub}/instructions.local"
+  local dest_metadata="${repo_dotgithub}/metadata.local"
+
+  local src_instructions="${DEST_GITHUB_DIR}/instructions"
+  local src_metadata="${DEST_GITHUB_DIR}/metadata"
+
+  mkdir -p "$dest_instructions" "$dest_metadata"
+
+  # Copy instruction files (add-only)
+  if [[ -d "$src_instructions" ]]; then
+    while IFS= read -r -d '' file; do
+      local base dest
+      base="$(basename "$file")"
+      dest="${dest_instructions}/${base}"
+
+      [[ -e "$dest" ]] && continue
+      cp -p "$file" "$dest"
+    done < <(find "$src_instructions" -maxdepth 1 -type f -name '*.instructions.md' -print0)
+  fi
+
+  # Copy metadata files (add-only)
+  if [[ -d "$src_metadata" ]]; then
+    while IFS= read -r -d '' file; do
+      local base dest
+      base="$(basename "$file")"
+      dest="${dest_metadata}/${base}"
+
+      [[ -e "$dest" ]] && continue
+      cp -p "$file" "$dest"
+    done < <(find "$src_metadata" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -print0)
+  fi
+
+  # Add a tiny README to help discoverability (add-only)
+  if [[ ! -e "${dest_instructions}/README.md" ]]; then
+    cat > "${dest_instructions}/README.md" <<'EOF'
+# Local Copilot instructions (untracked)
+
+This folder is populated by dotfiles on Codespace startup.
+
+Copilot will not automatically apply these just because they exist on disk.
+To use them, attach/paste the relevant instruction file into Copilot Chat.
+
+Related metadata lives in: ../metadata.local/
+EOF
+  fi
+
+  # Keep them untracked without touching repo .gitignore (global exclude)
+  local git_global_excludes="${HOME}/.config/git/ignore"
+  mkdir -p "$(dirname "$git_global_excludes")"
+  touch "$git_global_excludes"
+
+  # Add-only append to global excludes
+  grep -qxF '.github/instructions.local/' "$git_global_excludes" || echo '.github/instructions.local/' >> "$git_global_excludes"
+  grep -qxF '.github/metadata.local/' "$git_global_excludes" || echo '.github/metadata.local/' >> "$git_global_excludes"
+}
+
 # Only run in Codespaces where the github/github workspace exists.
 if [[ -d "$WORKSPACE_GITHUB_DIR" ]]; then
   sync_playbook_add_only || echo "Copilot playbook sync failed (non-fatal)."
+  sync_repo_local_guidance_add_only || echo "Repo-local guidance sync failed (non-fatal)."
 fi
 
 # --- Ensure ~/.bash_aliases is installed and sourced ---
