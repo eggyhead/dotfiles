@@ -1,5 +1,78 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-if [[ $GO_PROXY_PAT ]]; then
-  echo "machine goproxy.githubapp.com login nobody password $GO_PROXY_PAT" >> $HOME/.netrc
+# Existing behavior
+if [[ ${GO_PROXY_PAT:-} ]]; then
+  echo "machine goproxy.githubapp.com login nobody password $GO_PROXY_PAT" >> "$HOME/.netrc"
 fi
+
+# --- Copilot playbook sync into github/github Codespaces (track main; add-only) ---
+PLAYBOOK_REPO_URL="https://github.com/github/eggyhead-copilot-playbook.git"
+PLAYBOOK_BRANCH="main"
+PLAYBOOK_CACHE_DIR="${HOME}/.local/share/copilot-playbooks/github-eggyhead-copilot-playbook"
+
+WORKSPACE_GITHUB_DIR="/workspaces/github"
+DEST_ROOT="${WORKSPACE_GITHUB_DIR}/.copilot"
+DEST_GITHUB_DIR="${DEST_ROOT}/github"
+
+sync_playbook_add_only() {
+  mkdir -p "$(dirname "$PLAYBOOK_CACHE_DIR")"
+
+  if [[ -d "$PLAYBOOK_CACHE_DIR/.git" ]]; then
+    git -C "$PLAYBOOK_CACHE_DIR" fetch --quiet origin
+  else
+    rm -rf "$PLAYBOOK_CACHE_DIR"
+    git clone --quiet "$PLAYBOOK_REPO_URL" "$PLAYBOOK_CACHE_DIR"
+  fi
+
+  # Track main
+  git -C "$PLAYBOOK_CACHE_DIR" checkout --quiet "$PLAYBOOK_BRANCH"
+  git -C "$PLAYBOOK_CACHE_DIR" pull --ff-only --quiet origin "$PLAYBOOK_BRANCH"
+
+  # Ensure destination exists
+  mkdir -p "$DEST_GITHUB_DIR"
+
+  # Add-only copy: copy files that do not exist in destination yet.
+  # This copies ONLY the playbook repo's `github/` directory contents.
+  local src="${PLAYBOOK_CACHE_DIR}/github"
+
+  if [[ ! -d "$src" ]]; then
+    echo "Copilot playbook repo does not contain a github/ directory at ${src}"
+    return 0
+  fi
+
+  # Create directories in destination to match source
+  # (safe even if they already exist)
+  while IFS= read -r -d '' dir; do
+    rel="${dir#"$src"/}"
+    mkdir -p "${DEST_GITHUB_DIR}/${rel}"
+  done < <(find "$src" -type d -print0)
+
+  # Copy new files only
+  while IFS= read -r -d '' file; do
+    rel="${file#"$src"/}"
+    dest_file="${DEST_GITHUB_DIR}/${rel}"
+
+    if [[ -e "$dest_file" ]]; then
+      # add-only: do not overwrite
+      continue
+    fi
+
+    mkdir -p "$(dirname "$dest_file")"
+    cp -p "$file" "$dest_file"
+  done < <(find "$src" -type f -print0)
+
+  # Ensure a stable entrypoint README exists (add-only)
+  if [[ ! -e "${DEST_ROOT}/README.md" ]]; then
+    cat > "${DEST_ROOT}/README.md" <<'EOF'
+# Copilot playbook (workspace-local)
+
+This folder is populated by your dotfiles on Codespace startup from:
+- https://github.com/github/eggyhead-copilot-playbook (branch: main)
+- specifically its `github/` folder
+
+Start here:
+- github/docs/annoyances-and-workflow.md
+- github/metadata/dotcom-test-modes.metadata.yml
+- github/instructions/dotcom
+
