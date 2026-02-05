@@ -94,12 +94,26 @@ EOF
 #   .github/instructions.local/
 #   .github/metadata.local/
 sync_repo_local_guidance_add_only() {
+  # Ensure playbook cache is up to date
+  mkdir -p "$(dirname "$PLAYBOOK_CACHE_DIR")"
+
+  if [[ -d "$PLAYBOOK_CACHE_DIR/.git" ]]; then
+    git -C "$PLAYBOOK_CACHE_DIR" fetch --quiet origin
+  else
+    rm -rf "$PLAYBOOK_CACHE_DIR"
+    git clone --quiet "$PLAYBOOK_REPO_URL" "$PLAYBOOK_CACHE_DIR"
+  fi
+
+  # Track main
+  git -C "$PLAYBOOK_CACHE_DIR" checkout --quiet "$PLAYBOOK_BRANCH"
+  git -C "$PLAYBOOK_CACHE_DIR" pull --ff-only --quiet origin "$PLAYBOOK_BRANCH"
+
   local repo_dotgithub="${WORKSPACE_GITHUB_DIR}/.github"
   local dest_instructions="${repo_dotgithub}/instructions.local"
   local dest_metadata="${repo_dotgithub}/metadata.local"
 
-  local src_instructions="${DEST_GITHUB_DIR}/instructions"
-  local src_metadata="${DEST_GITHUB_DIR}/metadata"
+  local src_instructions="${PLAYBOOK_CACHE_DIR}/github/instructions"
+  local src_metadata="${PLAYBOOK_CACHE_DIR}/github/metadata"
 
   mkdir -p "$dest_instructions" "$dest_metadata"
 
@@ -149,11 +163,12 @@ EOF
   # Add-only append to global excludes
   grep -qxF '.github/instructions.local/' "$git_global_excludes" || echo '.github/instructions.local/' >> "$git_global_excludes"
   grep -qxF '.github/metadata.local/' "$git_global_excludes" || echo '.github/metadata.local/' >> "$git_global_excludes"
+
+  echo "Copilot playbook: added any missing files into ${repo_dotgithub}/instructions.local and ${repo_dotgithub}/metadata.local"
 }
 
 # Only run in Codespaces where the github/github workspace exists.
 if [[ -d "$WORKSPACE_GITHUB_DIR" ]]; then
-  sync_playbook_add_only || echo "Copilot playbook sync failed (non-fatal)."
   sync_repo_local_guidance_add_only || echo "Repo-local guidance sync failed (non-fatal)."
 fi
 
