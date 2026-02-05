@@ -95,7 +95,7 @@ EOF
 #   .github/metadata.local/
 sync_repo_local_guidance_add_only() {
   # Ensure playbook cache is up to date
-  mkdir -p "$(dirname "$PLAYBOOK_CACHE_DIR")"
+  mkdir -p "$PLAYBOOK_CACHE_DIR"
 
   if [[ -d "$PLAYBOOK_CACHE_DIR/.git" ]]; then
     git -C "$PLAYBOOK_CACHE_DIR" fetch --quiet origin
